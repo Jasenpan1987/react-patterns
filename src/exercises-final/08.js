@@ -15,14 +15,16 @@ class Toggle extends React.Component {
   initialState = {on: this.props.initialOn}
   state = this.initialState
   internalSetState(changes, callback) {
-    this.setState(state => {
+    this.setState(currentState => {
       // handle function setState call
       const changesObject =
-        typeof changes === 'function' ? changes(state) : changes
+        typeof changes === 'function'
+          ? changes(currentState)
+          : changes
 
       // apply state reducer
       const reducedChanges =
-        this.props.stateReducer(state, changesObject) || {}
+        this.props.stateReducer(currentState, changesObject) || {}
 
       // return null if there are no changes to be made
       // (to avoid an unecessary rerender)

@@ -27,36 +27,37 @@ class Toggle extends React.Component {
   static defaultProps = {
     initialOn: false,
     onReset: () => {},
-    // 🐨 let's add a default stateReducer here. It should return
-    // the changes object as it is passed.
+    stateReducer: (state, changes) => changes,
   }
   initialState = {on: this.props.initialOn}
   state = this.initialState
-  // 🐨 let's add a method here called `internalSetState`. It will simulate
-  // the same API as `setState(updater, callback)`:
-  // - updater: (changes object or function that returns the changes object)
-  // - callback: Function called after the state has been updated
-  // This will call setState with an updater function (a function that receives the state).
-  // If the changes are a function, then call that function with the state to get the actual changes
-  //
-  // 🐨 Call this.props.stateReducer with the `state` and `changes` to get the user changes.
-  //
-  // 🐨 Then, if the returned value exists and has properties, return that from your updater function.
-  // If it does not exist or is an empty object, then return null (avoids an unecessary re-render).
-  //
-  // 🐨 Pass the callback to the 2nd argument to this.setState
-  //
-  // 🐨 Finally, update all pre-existing instances of this.setState
-  // to this.internalSetState
+
+  internalSetState = (changes, callback) => {
+    this.setState(state => {
+      const changesObject =
+        typeof changes === 'function' ? changes(state) : changes
+
+      const reducedChanges =
+        this.props.stateReducer(state, changesObject) || {}
+
+      return Object.keys(reducedChanges).length
+        ? reducedChanges
+        : null
+    }, callback)
+  }
+
   reset = () =>
-    this.setState(this.initialState, () =>
+    this.internalSetState(this.initialState, () =>
       this.props.onReset(this.state.on),
     )
-  toggle = () =>
-    this.setState(
-      ({on}) => ({on: !on}),
+
+  toggle = () => {
+    this.internalSetState(
+      state => ({on: !state.on}),
       () => this.props.onToggle(this.state.on),
     )
+  }
+
   getTogglerProps = ({onClick, ...props} = {}) => ({
     onClick: callAll(onClick, this.toggle),
     'aria-pressed': this.state.on,
