@@ -524,3 +524,230 @@ class Usage extends React.Component {
   }
 }
 ```
+
+## 8. State Reducer Pattern with Types
+
+In the above example, the user of the Toggle component has very little knowledge about what was going on with the state reducer. To improve this, we can add type properties to give the user more infomation about the state reducer, and also allows the user to add addtional logic. StateChangeTypes are strings or enums looks like this:
+
+```jsx
+static stateChangeTypes = {
+  toggle: 'toggle',
+  reset: 'reset',
+}
+```
+
+And we can provide types from the usage of the component by passing into the reducers like this:
+
+```jsx
+toggleStateReducer = (state, changes) => {
+  if (changes.type === 'forced') {
+    return changes
+  }
+  if (this.state.timesClicked >= 4) {
+    return {...changes, on: false}
+  }
+  return changes
+}
+
+<button onClick={() => toggle({type: 'forced'})}>
+  Force Toggle
+</button>
+```
+
+### Here is how it works:
+
+```jsx
+class Toggle extends React.Component {
+  static stateChangeTypes = {
+    toggle: 'toggle',
+    reset: 'reset',
+  }
+  static defaultProps = {
+    initialOn: false,
+    onReset: () => {},
+    stateReducer: (state, changes) => changes,
+  }
+  initialState = {on: this.props.initialOn}
+  state = this.initialState
+  internalSetState(changes, callback) {
+    this.setState(state => {
+      const changesObject =
+        typeof changes === 'function' ? changes(state) : changes
+
+      const reducedChanges =
+        this.props.stateReducer(state, changesObject) || {}
+      // strip out the type to prevent useless rerender
+      const {type: ignoredTypes, ...remainingChanges} = reducedChanges
+
+      return Object.keys(remainingChanges).length
+        ? remainingChanges
+        : null
+    }, callback)
+  }
+  reset = () =>
+    this.internalSetState(
+      {...this.initialState, type: Toggle.stateChangeTypes.reset},
+      () => this.props.onReset(this.state.on),
+    )
+  toggle = ({type = Toggle.stateChangeTypes.toggle} = {}) =>
+    this.internalSetState(
+      ({on}) => ({on: !on, type}), // append the type
+      () => this.props.onToggle(this.state.on),
+    )
+  getTogglerProps = ({onClick, ...props} = {}) => ({
+    onClick: callAll(onClick, () => this.toggle()),
+    'aria-pressed': this.state.on,
+    ...props,
+  })
+  getStateAndHelpers() {
+    return {
+      on: this.state.on,
+      toggle: this.toggle,
+      reset: this.reset,
+      getTogglerProps: this.getTogglerProps,
+    }
+  }
+  render() {
+    return this.props.children(this.getStateAndHelpers())
+  }
+}
+```
+
+To use:
+
+```jsx
+class Usage extends React.Component {
+  static defaultProps = {
+    onToggle: (...args) => console.log('onToggle', ...args),
+    onReset: (...args) => console.log('onReset', ...args),
+  }
+  initialState = {timesClicked: 0}
+  state = this.initialState
+  handleToggle = (...args) => {
+    this.setState(({timesClicked}) => ({
+      timesClicked: timesClicked + 1,
+    }))
+    this.props.onToggle(...args)
+  }
+  handleReset = (...args) => {
+    this.setState(this.initialState)
+    this.props.onReset(...args)
+  }
+  toggleStateReducer = (state, changes) => {
+    if (changes.type === 'forced') {
+      return changes
+    }
+    if (this.state.timesClicked >= 4) {
+      return {...changes, on: false}
+    }
+    return changes
+  }
+  render() {
+    const {timesClicked} = this.state
+    return (
+      <Toggle
+        stateReducer={this.toggleStateReducer}
+        onToggle={this.handleToggle}
+        onReset={this.handleReset}
+        ref={this.props.toggleRef}
+      >
+        {({on, toggle, reset, getTogglerProps}) => (
+          <div>
+            <Switch
+              {...getTogglerProps({
+                on: on,
+              })}
+            />
+            {timesClicked > 4 ? (
+              <div data-testid="notice">
+                Whoa, you clicked too much!
+                <br />
+                <button onClick={() => toggle({type: 'forced'})}>
+                  Force Toggle
+                </button>
+                <br />
+              </div>
+            ) : timesClicked > 0 ? (
+              <div data-testid="click-count">
+                Click count: {timesClicked}
+              </div>
+            ) : null}
+            <button onClick={reset}>Reset</button>
+          </div>
+        )}
+      </Toggle>
+    )
+  }
+}
+```
+
+## 9. Controlled Props
+
+In most of the ui component libriaries, we always see for the input, it's a `controlled` component, what it means is the data or the state is actually come from the props instead of its own state, and also when we use it, we need to provide an update function to modify its state or value.
+
+For instance:
+
+```jsx
+<Input type="text" value={inputValue} onChange={onChangeFunc} />
+```
+
+Here we are trying to implement it in a more flexable way.
+
+```jsx
+class Toggle extends React.Component {
+  state = {on: false}
+
+  isControlled = prop => {
+    return this.props[prop] !== undefined
+  }
+
+  getState = prop => {
+    if (this.isControlled(prop)) {
+      return this.props[prop]
+    }
+    return this.state[prop]
+  }
+
+  toggle = () => {
+    if (this.isControlled('on')) {
+      this.props.onToggle(!this.getState('on'))
+    } else {
+      this.setState(
+        ({on}) => ({on: !on}),
+        () => {
+          this.props.onToggle(this.getState('on'))
+        },
+      )
+    }
+  }
+
+  render() {
+    const on = this.getState('on')
+    return <Switch on={on} onClick={this.toggle} />
+  }
+}
+```
+
+1.  The `isControlled` method is to find out whether the component has a value provided from its props
+2.  The `getState` method is grab the property on the state if the component is not controlled, otherwise get the value from its props
+3.  Then we modify its value, we always need to figure out if the component is a controlled component or not.
+
+To Use:
+
+```jsx
+class Usage extends React.Component {
+  state = {bothOn: false} // this is the source of truth
+  handleToggle = on => {
+    this.setState({bothOn: on})
+  }
+  render() {
+    const {bothOn} = this.state
+    return (
+      <div>
+        <Toggle on={bothOn} onToggle={this.handleToggle} />
+        <Toggle on={bothOn} onToggle={this.handleToggle} />
+      </div>
+    )
+  }
+}
+```
