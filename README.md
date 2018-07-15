@@ -388,17 +388,28 @@ class Toggle extends React.Component {
   initialState = {on: this.props.initialOn}
   state = this.initialState
 
+  // internalSetState = (changes, callback) => {
+  //   this.setState(state => {
+  //     const changesObject =
+  //       typeof changes === 'function' ? changes(state) : changes
+
+  //     const reducedChanges =
+  //       this.props.stateReducer(state, changesObject) || {}
+
+  //     return Object.keys(reducedChanges).length
+  //       ? reducedChanges
+  //       : null
+  //   }, callback)
+  // }
+
+  // advanced implementation, strip off the multiple variable assignments,
+  // works exactly the same functionality
   internalSetState = (changes, callback) => {
-    this.setState(state => {
-      const changesObject =
-        typeof changes === 'function' ? changes(state) : changes
-
-      const reducedChanges =
-        this.props.stateReducer(state, changesObject) || {}
-
-      return Object.keys(reducedChanges).length
-        ? reducedChanges
-        : null
+    this.setState(currentState => {
+      return [changes]
+        .map(c => (typeof c === 'function' ? c(currentState) : c))
+        .map(c => this.props.stateReducer(currentState, c) || {})
+        .map(c => (Object.keys(c).length > 0 ? c : null))[0]
     }, callback)
   }
 
